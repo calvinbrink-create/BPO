@@ -139,6 +139,10 @@ def fetch_ted():
         return []
     notices = data.get("notices") or data.get("results") or []
     print(f"TED: {notices and len(notices) or 0} notices returned for query", file=sys.stderr)
+    if notices:
+        sample = notices[0]
+        print(f"TED: sample notice keys = {sorted(sample.keys())}", file=sys.stderr)
+        print(f"TED: sample notice-title field = {sample.get('notice-title')!r}", file=sys.stderr)
     out = []
     for n in notices:
         title = n.get("notice-title") or n.get("title") or ""
