@@ -139,18 +139,24 @@ def fetch_ted():
         return []
     notices = data.get("notices") or data.get("results") or []
     print(f"TED: {notices and len(notices) or 0} notices returned for query", file=sys.stderr)
-    if notices:
-        sample = notices[0]
-        print(f"TED: sample notice keys = {sorted(sample.keys())}", file=sys.stderr)
-        print(f"TED: sample notice-title field = {sample.get('notice-title')!r}", file=sys.stderr)
+
+    def pick_lang(v):
+        # notice-title / buyer-name come back as {lang_code: text}, e.g.
+        # {"eng": "...", "hun": "...", ...} - confirmed live 2026-09-20 (see
+        # commit b1c2274's diagnostic). Picking an arbitrary language here
+        # (the previous behavior) silently dropped real English-keyword
+        # matches whenever English wasn't first in the dict - confirmed live
+        # too: the diagnostic's own sample notice was a genuine UK call-centre
+        # tender whose `eng` value matched "call centre" verbatim, but it was
+        # discarded because Hungarian happened to be the first key.
+        if isinstance(v, dict):
+            return v.get("eng") or next(iter(v.values()), "") if v else ""
+        return v or ""
+
     out = []
     for n in notices:
-        title = n.get("notice-title") or n.get("title") or ""
-        if isinstance(title, dict):
-            title = next(iter(title.values()), "") if title else ""
-        buyer = n.get("buyer-name") or n.get("buyer") or ""
-        if isinstance(buyer, dict):
-            buyer = next(iter(buyer.values()), "") if buyer else ""
+        title = pick_lang(n.get("notice-title") or n.get("title") or "")
+        buyer = pick_lang(n.get("buyer-name") or n.get("buyer") or "")
         pub_id = n.get("publication-number") or n.get("id")
         if not matches_keywords(str(title)):
             continue
