@@ -43,6 +43,35 @@ earlier GitHub-PAT design could.
   will also email you the moment a lead comes in. Not required for leads to
   be captured — purely a convenience layer on top of storage that already works.
 
+### 1b. Contacting leads via Gmail, on a schedule (`demand-gen/outreach/contact_leads.py`)
+Runs every 2 hours via `.github/workflows/demand-gen-outreach.yml`. Reads
+`GET /api/leads`, and for anyone with `status: "new"`, sends a real,
+personal reply from sales@growthsupplyhouse.com quoting back what they
+actually wrote, then marks that lead `contacted` via `POST /api/leads` so
+it's never emailed twice. This is legitimate in a way the earlier rejected
+design was not: everyone contacted here chose to submit the form.
+
+**What it never does:** invoice anyone, or infer agreement from a reply.
+The capability-token invoicing API already exists in this repo's root
+(`src/api/auto-invoice.js`) but is **not deployed to production** — see the
+root README. Even once it is, an invoice only fires from someone
+explicitly clicking "accept & pay," never from this script.
+
+**Setup needed (there's no way around this one — two independent cloud
+platforms need a shared credential to trust each other, and creating one
+always requires a human):**
+- `SMTP_USER` / `SMTP_PASS` as **BPO repo secrets** — reuse the exact same
+  Gmail app password already set on `Lead-Generation-`'s secrets for
+  sales@growthsupplyhouse.com. Not a new signup, just pasting an existing
+  value into a second repo (Settings → Secrets and variables → Actions).
+- `ADMIN_SECRET` as a **BPO repo secret** — already generated, no signup
+  needed. This repo is public, so the value is deliberately **not** written
+  here; it was given to Calvin directly in chat and matches the value
+  already set on the `bpo-control-dashboard` Vercel project.
+
+Until both are set, this workflow runs on schedule and exits cleanly
+without sending anything — it does not fail the job.
+
 Leads land as JSON files in `demand-gen/leads/`, each with `status: "new"`.
 
 ### 2. UK procurement tenders (`tenders/fetch_tenders.py`)

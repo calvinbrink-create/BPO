@@ -1,0 +1,35 @@
+name: Demand Gen - Contact Leads
+
+# Every 2 hours: check the landing page's lead store for anyone new and
+# send each a real, personal reply from sales@growthsupplyhouse.com.
+# Only ever contacts people who submitted inquire.html themselves - see
+# demand-gen/outreach/contact_leads.py for why this is not the earlier,
+# rejected cold-outreach design.
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"   # every 2 hours
+  workflow_dispatch: {}
+
+concurrency:
+  group: demand-gen-outreach
+  cancel-in-progress: false
+
+jobs:
+  contact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r demand-gen/requirements.txt
+      - run: python demand-gen/outreach/contact_leads.py
+        env:
+          LEADS_API_URL: ${{ vars.LEADS_API_URL || 'https://bpo-control-dashboard.vercel.app/api/leads' }}
+          ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
+          SMTP_HOST: ${{ vars.SMTP_HOST || 'smtp.gmail.com' }}
+          SMTP_PORT: ${{ vars.SMTP_PORT || '587' }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          FROM_NAME: ${{ vars.FROM_NAME || 'Growth Supply House' }}
