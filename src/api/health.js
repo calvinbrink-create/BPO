@@ -1,0 +1,1 @@
+module.exports=async(req,res)=>res.status(200).json({ok:true,paypal:!!process.env.PAYPAL_CLIENT_ID&&!!process.env.PAYPAL_CLIENT_SECRET,paypalWebhook:!!process.env.PAYPAL_WEBHOOK_ID,mode:String(process.env.PAYPAL_MODE||"live").toLowerCase(),depositInvoice:true,finalInvoice:true,depositCapabilities:32,finalCapabilities:16,version:"7.3.0"});

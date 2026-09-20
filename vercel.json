@@ -1,0 +1,8 @@
+{
+  "functions": { "api/**/*.js": { "maxDuration": 30 } },
+  "crons": [
+    { "path": "/api/cron/bpo-health", "schedule": "0 7 * * *" },
+    { "path": "/api/cron/bpo-scan", "schedule": "30 7 * * *" },
+    { "path": "/api/cron/bpo-cycle", "schedule": "0 8 * * *" }
+  ]
+}

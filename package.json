@@ -1,0 +1,12 @@
+{
+  "name": "bpo-control-api",
+  "version": "7.3.0",
+  "private": true,
+  "description": "BPO Control API - PayPal-backed deposit/final invoicing with scheduled health, scan, and cycle jobs.",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "mint-capability": "node scripts/mint-capability.js"
+  }
+}
