@@ -1,12 +1,11 @@
 """
-Surfaces published UK procurement notices for outsourcing/BPO-type work from
-the two official, keyless OCDS APIs: Contracts Finder (below-threshold,
-England-wide) and Find a Tender (above-threshold, UK-wide).
+Surfaces published procurement notices for outsourcing/BPO-type work from
+official, public government sources: UK Contracts Finder + Find a Tender
+(both keyless), EU TED (keyless), and US SAM.gov (needs a free API key).
 
-A published tender is real, budgeted, already-signaled demand for exactly
-this kind of work -- unlike a company hiring an internal support rep, which
-says nothing about wanting to outsource. That's the line this script holds:
-it only ever surfaces opportunities for a human to look at and respond to.
+This is the active half of demand generation -- not a page hoping someone
+finds it, but going to where real, budgeted buyers already publish exactly
+this need. A published tender IS the demand signal, full stop.
 
 It NEVER submits a bid. Submitting a response to a public tender is a legal
 act with real consequences for a real procurement process; automating that
@@ -15,6 +14,7 @@ demand-gen system exists to avoid repeating. This script's only output is a
 markdown digest for a human to read and act on.
 """
 import json
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -25,6 +25,8 @@ import requests
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 CONTRACTS_FINDER_SEARCH = "https://www.contractsfinder.service.gov.uk/Published/Notices/OCDS/Search"
 FIND_A_TENDER_FEED = "https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages"
+TED_SEARCH_API = "https://api.ted.europa.eu/v3/notices/search"
+SAM_OPPORTUNITIES_API = "https://api.sam.gov/opportunities/v2/search"
 
 TENDER_KEYWORDS = [
     "call centre", "call center", "contact centre", "contact center",
@@ -108,6 +110,107 @@ def fetch_find_a_tender():
     return out
 
 
+def fetch_ted():
+    """
+    EU-wide public procurement notices via TED's public Search API - no key
+    required. TED's response fields have drifted before across API versions;
+    this is written defensively (multiple fallback field names) and logs the
+    raw notice count so a live run distinguishes "API changed shape, 0
+    parsed" from "genuinely nothing published this run."
+    """
+    query = " OR ".join([
+        'FT~"call centre"', 'FT~"call center"', 'FT~"contact centre"',
+        'FT~"back office"', 'FT~"business process outsourcing"',
+    ])
+    body = {
+        "query": query,
+        "fields": ["publication-number", "notice-title", "buyer-name", "publication-date", "links"],
+        "page": 1,
+        "limit": 100,
+    }
+    try:
+        r = requests.post(TED_SEARCH_API, json=body, headers={**HEADERS, "Content-Type": "application/json"}, timeout=30)
+        if r.status_code != 200:
+            print(f"TED: HTTP {r.status_code} {r.text[:300]}", file=sys.stderr)
+            return []
+        data = r.json()
+    except Exception as e:
+        print(f"TED: {e}", file=sys.stderr)
+        return []
+    notices = data.get("notices") or data.get("results") or []
+    print(f"TED: {notices and len(notices) or 0} notices returned for query", file=sys.stderr)
+    out = []
+    for n in notices:
+        title = n.get("notice-title") or n.get("title") or ""
+        if isinstance(title, dict):
+            title = next(iter(title.values()), "") if title else ""
+        buyer = n.get("buyer-name") or n.get("buyer") or ""
+        if isinstance(buyer, dict):
+            buyer = next(iter(buyer.values()), "") if buyer else ""
+        pub_id = n.get("publication-number") or n.get("id")
+        if not matches_keywords(str(title)):
+            continue
+        out.append({
+            "source": "eu_ted",
+            "ocid": f"ted-{pub_id}",
+            "buyer": buyer,
+            "title": str(title),
+            "description": "",
+            "url": (n.get("links") or {}).get("html", {}).get("ENG", "") if isinstance(n.get("links"), dict) else "",
+            "date": n.get("publication-date"),
+        })
+    return out
+
+
+def fetch_sam():
+    """
+    US federal contracting opportunities via SAM.gov's Opportunities API.
+    Needs a free API key (instant self-service at sam.gov/data-services or
+    api.data.gov) set as SAM_API_KEY - gracefully skipped until then, same
+    pattern as the Reddit monitor's REDDIT_CLIENT_ID.
+    """
+    api_key = os.environ.get("SAM_API_KEY")
+    if not api_key:
+        print("SAM_API_KEY not configured - skipping US federal opportunities.", file=sys.stderr)
+        return []
+    from datetime import timedelta
+    today = datetime.now(timezone.utc)
+    params = {
+        "api_key": api_key,
+        "postedFrom": (today - timedelta(days=7)).strftime("%m/%d/%Y"),
+        "postedTo": today.strftime("%m/%d/%Y"),
+        "title": "call center",
+        "limit": 100,
+    }
+    try:
+        r = requests.get(SAM_OPPORTUNITIES_API, params=params, headers=HEADERS, timeout=30)
+        if r.status_code != 200:
+            print(f"SAM.gov: HTTP {r.status_code} {r.text[:300]}", file=sys.stderr)
+            return []
+        data = r.json()
+    except Exception as e:
+        print(f"SAM.gov: {e}", file=sys.stderr)
+        return []
+    notices = data.get("opportunitiesData") or []
+    print(f"SAM.gov: {len(notices)} opportunities returned for query", file=sys.stderr)
+    out = []
+    for n in notices:
+        title = n.get("title", "")
+        desc = n.get("description", "") or ""
+        if not (matches_keywords(title) or matches_keywords(desc)):
+            continue
+        out.append({
+            "source": "us_sam",
+            "ocid": f"sam-{n.get('noticeId')}",
+            "buyer": n.get("fullParentPathName") or n.get("departmentName") or "",
+            "title": title,
+            "description": desc[:500],
+            "url": n.get("uiLink", ""),
+            "date": n.get("postedDate"),
+        })
+    return out
+
+
 def draft_response(item):
     return (
         f"Hi,\n\nI saw your notice for \"{item['title']}\" ({item['buyer'] or 'your organisation'}) "
@@ -128,7 +231,7 @@ def save_seen(seen):
 
 
 def main():
-    items = fetch_contracts_finder() + fetch_find_a_tender()
+    items = fetch_contracts_finder() + fetch_find_a_tender() + fetch_ted() + fetch_sam()
     seen = load_seen()
     new_items = [i for i in items if i.get("ocid") and i["ocid"] not in seen]
 
