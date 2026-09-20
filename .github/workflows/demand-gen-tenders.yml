@@ -1,0 +1,39 @@
+name: Demand Gen - Tender Digest
+
+# Surfaces published UK procurement notices for outsourcing/BPO work.
+# Never submits a bid - writes a reviewable digest only. See
+# demand-gen/tenders/fetch_tenders.py for why.
+
+on:
+  schedule:
+    - cron: "0 8 * * *"   # 08:00 UTC daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: demand-gen-tenders
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r demand-gen/requirements.txt
+      - run: python demand-gen/tenders/fetch_tenders.py
+      - name: Commit digest if anything new was found
+        run: |
+          git config user.name "demand-gen-bot"
+          git config user.email "demand-gen-bot@users.noreply.github.com"
+          git add demand-gen/tenders/digest demand-gen/tenders/seen.json
+          git commit -m "Tender digest: $(date -u '+%Y-%m-%d %H:%M') UTC" || echo "nothing new"
+          for attempt in 1 2 3; do
+            git push -q && break
+            git pull --rebase --autostash -q origin "${GITHUB_REF_NAME}" || true
+            sleep $((attempt * 5))
+          done

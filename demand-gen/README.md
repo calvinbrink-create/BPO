@@ -1,0 +1,86 @@
+# BPO Demand Generation
+
+Finds people who actually want BPO/outsourcing help, and never invoices
+anyone off an inference. Built to replace an earlier, rejected design that
+cold-emailed people with zero signaled interest and auto-fired a PayPal
+invoice the moment a reply's wording loosely matched a positive keyword —
+that was coercive, not lead generation, and nothing here works that way.
+
+## The rule this whole thing follows
+
+**A lead is someone who told you, in some form, that they want this.**
+Not someone who happens to be hiring internally (that's a proxy that
+assumes intent no one has stated). Not someone who replied "sounds good"
+to an email they never asked for. An actual signal: they filled in a form
+on a page describing the service, or they published a tender for this
+exact work, or they posted in public asking for it.
+
+**An invoice only ever fires from an explicit action**, never from parsed
+sentiment. See "Consent → invoice" below.
+
+## Channels
+
+### 1. Inbound landing page (`bpo-control-dashboard.vercel.app/inquire.html`)
+A real page describing the service with a contact form. Only people who
+submit it become leads. The Vercel function (`api/lead.js` in that project)
+writes each submission to `demand-gen/leads/` in this repo via a GitHub
+token scoped to just this repo's contents.
+
+**One-time setup needed:** create a fine-grained GitHub PAT (Settings →
+Developer settings → Fine-grained tokens → scope to this repo only,
+Contents: Read and write), and add it as the `GITHUB_TOKEN` environment
+variable on the `bpo-control-dashboard` Vercel project. Until that's set,
+the form will accept submissions but fail to store them (`storage_not_configured`).
+
+Leads land as JSON files in `demand-gen/leads/`, each with `status: "new"`.
+
+### 2. UK procurement tenders (`tenders/fetch_tenders.py`)
+Runs daily via `.github/workflows/demand-gen-tenders.yml`. Pulls Contracts
+Finder + Find a Tender for published outsourcing/call-centre/back-office
+notices — a published tender is real, budgeted demand. Writes a markdown
+digest to `tenders/digest/`. **Never submits a bid** — that's a legal act
+on the tender portal and stays a deliberate human decision.
+
+### 3. Public asks (`social/reddit_monitor.py`)
+Runs every 6 hours via `.github/workflows/demand-gen-social.yml`. Searches
+Reddit's public, keyless JSON search for people explicitly asking for a
+BPO/outsourcing/call-center partner in a handful of relevant subreddits.
+Writes a markdown digest with a drafted, non-pitchy reply to `social/digest/`.
+**Never posts anything itself** — read the actual post, then decide whether
+and how to reply.
+
+### 4. Paid search — not built
+Would require a Google Ads account and ad budget, neither of which can be
+created by an automated agent. The landing page and pricing tiers are
+already shaped to receive that traffic whenever an account exists; the
+campaign/keyword setup itself is a manual one-time step.
+
+## Consent → invoice
+
+Once a lead (from any channel) explicitly says they want to proceed, the
+next step is a proposal with a single, unambiguous call to action — an
+"Accept & pay deposit" link. Clicking it is the only thing that creates a
+real PayPal invoice, via the capability-token endpoints already built in
+`src/api/auto-invoice.js`. There is no code path anywhere in this system
+that infers agreement from tone, keywords, or anything short of that click.
+
+That bridge is not fully wired yet: it depends on the reconstructed
+`src/api/_lib.js` capability scheme (see the repo root README) being
+reviewed and deployed to the live `bpo-control-api` project, which hasn't
+happened. Until then, turning an accepted proposal into an actual invoice
+is a manual step — slower, but it doesn't risk firing a real invoice off
+untested code.
+
+## Lead lifecycle
+
+```
+demand-gen/leads/*.json   status: new
+                           -> a human (or a supervised follow-up routine)
+                              reads it and replies like a person would
+                           -> replied
+                           -> if they explicitly want to proceed: proposal
+                              sent with an accept-and-pay link
+                           -> if they click it: real invoice, real consent
+```
+
+No stage in this chain fires automatically off inferred interest.

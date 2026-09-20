@@ -7,7 +7,16 @@ cron jobs (health check, invoice scan, draft/overdue cycle report).
 Live production deployment: `bpo-control-api` on Vercel (`bpo-control-api.vercel.app`,
 Vercel Auth protected). A read-only status page for that project is published
 separately at **https://bpo-control-dashboard.vercel.app** (its own project,
-does not call or modify this API).
+does not call or modify this API) — that same project now also hosts the
+public inquiry form at `/inquire.html`.
+
+## Getting customers
+
+See [`demand-gen/README.md`](demand-gen/README.md) for how this system finds
+people who actually want BPO help — an inbound landing page, real UK
+procurement tenders, and public posts from people explicitly asking — and
+why an invoice only ever fires from an explicit "accept" click, never from
+inferred interest.
 
 ## How this repo came to exist
 
