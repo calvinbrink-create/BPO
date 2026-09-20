@@ -26,6 +26,9 @@ jobs:
           python-version: "3.11"
       - run: pip install -r demand-gen/requirements.txt
       - run: python demand-gen/social/reddit_monitor.py
+        env:
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
       - name: Commit digest if anything new was found
         run: |
           git config user.name "demand-gen-bot"

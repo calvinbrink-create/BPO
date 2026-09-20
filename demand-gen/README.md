@@ -43,11 +43,23 @@ on the tender portal and stays a deliberate human decision.
 
 ### 3. Public asks (`social/reddit_monitor.py`)
 Runs every 6 hours via `.github/workflows/demand-gen-social.yml`. Searches
-Reddit's public, keyless JSON search for people explicitly asking for a
-BPO/outsourcing/call-center partner in a handful of relevant subreddits.
-Writes a markdown digest with a drafted, non-pitchy reply to `social/digest/`.
-**Never posts anything itself** — read the actual post, then decide whether
-and how to reply.
+Reddit for people explicitly asking for a BPO/outsourcing/call-center
+partner in a handful of relevant subreddits. Writes a markdown digest with
+a drafted, non-pitchy reply to `social/digest/`. **Never posts anything
+itself** — read the actual post, then decide whether and how to reply.
+
+Uses Reddit's OAuth API, not the anonymous `.json` search endpoints — those
+were tested live from this repo's own GitHub Actions runner and got a
+blanket HTTP 403 from Reddit's bot detection for every request (a real
+finding from an actual triggered run, not a guess). OAuth app-only auth is
+Reddit's own documented path for this kind of scripted, read-only access.
+
+**One-time setup needed:** create a free "script"-type app at
+[reddit.com/prefs/apps](https://www.reddit.com/prefs/apps) (personal use,
+no review needed), then add its client ID and secret as `REDDIT_CLIENT_ID`
+/ `REDDIT_CLIENT_SECRET` repo secrets (Settings → Secrets and variables →
+Actions). Until then, this workflow runs and exits cleanly without finding
+anything — it does not fail the job.
 
 ### 4. Paid search — not built
 Would require a Google Ads account and ad budget, neither of which can be

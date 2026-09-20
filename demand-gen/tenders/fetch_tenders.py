@@ -51,8 +51,10 @@ def fetch_contracts_finder(keyword_query="call centre OR back office OR outsourc
     except Exception as e:
         print(f"contracts finder: {e}", file=sys.stderr)
         return []
+    releases = data.get("releases", [])
+    print(f"contracts finder: {len(releases)} releases returned for query", file=sys.stderr)
     out = []
-    for release in data.get("releases", []):
+    for release in releases:
         tender = release.get("tender", {})
         title = tender.get("title", "")
         desc = tender.get("description", "")
@@ -82,8 +84,10 @@ def fetch_find_a_tender():
         return []
     out = []
     packages = data.get("releasePackages") or data.get("releases") or []
+    total_releases = 0
     for pkg in packages:
         releases = pkg.get("releases", [pkg]) if isinstance(pkg, dict) else []
+        total_releases += len(releases)
         for release in releases:
             tender = release.get("tender", {})
             title = tender.get("title", "")
@@ -100,6 +104,7 @@ def fetch_find_a_tender():
                     "url": docs[0].get("url", "") if docs else "",
                     "date": release.get("date"),
                 })
+    print(f"find a tender: {len(packages)} packages / {total_releases} releases returned (unfiltered feed)", file=sys.stderr)
     return out
 
 
@@ -129,10 +134,16 @@ def main():
 
     print(f"fetched {len(items)} matching notices, {len(new_items)} new")
 
+    # Always ensure these paths exist, even on a 0-new run (the common case)
+    # - the workflow's `git add` fails outright on a genuinely missing path,
+    # which used to turn "nothing new today" into a hard failure every time.
+    DIGEST_DIR.mkdir(parents=True, exist_ok=True)
+    seen.update(i["ocid"] for i in items if i.get("ocid"))
+    save_seen(seen)
+
     if not new_items:
         return
 
-    DIGEST_DIR.mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc)
     digest_path = DIGEST_DIR / f"{now.strftime('%Y-%m-%d')}.md"
 
@@ -149,9 +160,6 @@ def main():
 
     existing = digest_path.read_text() if digest_path.exists() else ""
     digest_path.write_text(existing + "\n".join(lines) + "\n")
-
-    seen.update(i["ocid"] for i in new_items)
-    save_seen(seen)
     print(f"wrote {digest_path}")
 
 
