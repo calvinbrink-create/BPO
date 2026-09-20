@@ -22,15 +22,26 @@ sentiment. See "Consent → invoice" below.
 
 ### 1. Inbound landing page (`bpo-control-dashboard.vercel.app/inquire.html`)
 A real page describing the service with a contact form. Only people who
-submit it become leads. The Vercel function (`api/lead.js` in that project)
-writes each submission to `demand-gen/leads/` in this repo via a GitHub
-token scoped to just this repo's contents.
+submit it become leads.
 
-**One-time setup needed:** create a fine-grained GitHub PAT (Settings →
-Developer settings → Fine-grained tokens → scope to this repo only,
-Contents: Read and write), and add it as the `GITHUB_TOKEN` environment
-variable on the `bpo-control-dashboard` Vercel project. Until that's set,
-the form will accept submissions but fail to store them (`storage_not_configured`).
+**Live now, zero setup needed.** `api/lead.js` stores each submission in a
+Vercel Blob store (`bpo-leads`) provisioned specifically for this project —
+no third-party account, no credential anyone had to go create. The token
+that authorizes it (`BLOB_READ_WRITE_TOKEN`) was injected automatically by
+Vercel the moment the store was linked to the project. A submission cannot
+silently fail to persist for lack of a forgotten credential the way the
+earlier GitHub-PAT design could.
+
+- **See captured leads with zero code:** Vercel dashboard → Storage →
+  `bpo-leads` → browse objects under `leads/`.
+- **Or pull them as JSON:** `GET /api/leads` with
+  `Authorization: Bearer <ADMIN_SECRET>` (a random value already generated
+  and stored on the project — ask Claude or check the Vercel project's
+  environment variables for the value if you need it).
+- **Optional real-time email notification:** set `RESEND_API_KEY` (free at
+  resend.com, ~2 minutes) and `BUSINESS_EMAIL` on the project, and `api/lead.js`
+  will also email you the moment a lead comes in. Not required for leads to
+  be captured — purely a convenience layer on top of storage that already works.
 
 Leads land as JSON files in `demand-gen/leads/`, each with `status: "new"`.
 
